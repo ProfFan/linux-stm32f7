@@ -1652,6 +1652,26 @@ int dwc2_hc_continue_transfer(struct dwc2_hsotg *hsotg,
 		 */
 		u32 hcchar = readl(hsotg->regs + HCCHAR(chan->hc_num));
 
+#if defined(CONFIG_MACH_STM32)
+		/*
+		 * With USB FS we sometimes observe the permanent NAKs from
+		 * devices on our first BULK IN request. This actually hangs up
+		 * the system due to permanent BULK IN transaction rescheduling.
+		 * Count how much NAKs we got, and stop rescheduling if this
+		 * number exceed some value (1000).
+		 */
+		u32 hcintmsk = readl(hsotg->regs + HCINTMSK(chan->hc_num));
+		u32 hcint = readl(hsotg->regs + HCINT(chan->hc_num));
+
+		if ((hcint & HCINTMSK_NAK) && !(hcintmsk & HCINTMSK_NAK) &&
+		    chan->ep_type == USB_ENDPOINT_XFER_BULK) {
+			writel(HCINTMSK_NAK, hsotg->regs + HCINT(chan->hc_num));
+			chan->naks++;
+			if (chan->naks >= 1000)
+				return 0;
+		}
+#endif
+
 		dwc2_hc_set_even_odd_frame(hsotg, chan, &hcchar);
 		hcchar |= HCCHAR_CHENA;
 		hcchar &= ~HCCHAR_CHDIS;
@@ -2732,10 +2752,22 @@ int dwc2_get_hwparams(struct dwc2_hsotg *hsotg)
 	width = (hwcfg3 & GHWCFG3_XFER_SIZE_CNTR_WIDTH_MASK) >>
 		GHWCFG3_XFER_SIZE_CNTR_WIDTH_SHIFT;
 	hw->max_transfer_size = (1 << (width + 11)) - 1;
+	/*
+	 * Clip max_transfer_size to 65535. dwc2_hc_setup_align_buf() allocates
+	 * coherent buffers with this size, and if it's too large we can
+	 * exhaust the coherent DMA pool.
+	 */
+	if (hw->max_transfer_size > 65535)
+		hw->max_transfer_size = 65535;
+
 	width = (hwcfg3 & GHWCFG3_PACKET_SIZE_CNTR_WIDTH_MASK) >>
 		GHWCFG3_PACKET_SIZE_CNTR_WIDTH_SHIFT;
 	hw->max_packet_count = (1 << (width + 4)) - 1;
+#if !defined(CONFIG_MACH_STM32)
 	hw->i2c_enable = !!(hwcfg3 & GHWCFG3_I2C);
+#else
+	hw->i2c_enable = 0;
+#endif
 	hw->total_fifo_size = (hwcfg3 & GHWCFG3_DFIFO_DEPTH_MASK) >>
 			      GHWCFG3_DFIFO_DEPTH_SHIFT;
 

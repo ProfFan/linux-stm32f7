@@ -344,6 +344,71 @@ out:
 #endif /* !CONFIG_ARCH_STM32F1 */
 
 /*
+ * USB is a special case since USB may be compiled as modules, so
+ * the appropriate CONFIG_STM_USB_OTG_xS will be undefined
+ */
+void stm32_iomux_usb_fs_init(void)
+{
+	static struct stm32f2_gpio_dsc otg_gpio[] = {
+		{0, 11}, {0, 12}, {0, 9}
+	};
+	int	i;
+
+	for (i = 0; i < ARRAY_SIZE(otg_gpio); i++) {
+		stm32f2_gpio_config(&otg_gpio[i],
+				    STM32F2_GPIO_ROLE_USB_OTG);
+	}
+}
+EXPORT_SYMBOL(stm32_iomux_usb_fs_init);
+
+void stm32_iomux_usb_hs_init(void)
+{
+	static struct stm32f2_gpio_dsc otg_gpio[] = {
+		{0, 0 }, /* DIR <?> */
+		{2, 0 }, /* STP PC0 */
+		{0, 5 }, /* CLK PA5 */
+		{7, 4 }, /* NXT PH4 */
+
+		{0, 3 }, /* DATA0 PA3  */
+		{1, 0 }, /* DATA1 PB0  */
+		{1, 1 }, /* DATA2 PB1  */
+		{1, 10}, /* DATA3 PB10 */
+		{1, 11}, /* DATA4 PB11 */
+		{1, 12}, /* DATA5 PB12 */
+		{1, 13}, /* DATA6 PB13 */
+		{1, 5 }, /* DATA7 PB5  */
+	};
+	volatile struct stm32f2_gpio_regs *gpio_reg;
+	int	i;
+
+	/* select the appropriate ULPI_DIR */
+	if (stm32_platform_get() == PLATFORM_STM32_STM32F7_DISCO) {
+		otg_gpio[0].port = 2;
+		otg_gpio[0].pin  = 2;
+	} else {
+		otg_gpio[0].port = 8;
+		otg_gpio[0].pin  = 11;
+	}
+
+	/*
+	 * if we are reset from low power mode, then ULPI_STP may be
+	 * still driving high, thus not allow USB PHY to fully wake-up
+	 */
+	gpio_reg = (void *)stm32_gpio_base[otg_gpio[1].port];
+	if (gpio_reg->idr & (1 << otg_gpio[1].pin)) {
+		gpio_reg->moder &= ~(3 << (otg_gpio[1].pin * 2));
+		gpio_reg->moder |=  (1 << (otg_gpio[1].pin * 2));
+		gpio_reg->odr &= ~(1 << otg_gpio[1].pin);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(otg_gpio); i++) {
+		stm32f2_gpio_config(&otg_gpio[i],
+				    STM32F2_GPIO_ROLE_USB_OTG);
+	}
+}
+EXPORT_SYMBOL(stm32_iomux_usb_hs_init);
+
+/*
  * Initialize the GPIO Alternative Functions of the STM32.
  */
 void __init stm32_iomux_init(void)
@@ -594,54 +659,15 @@ uartdone:
 		} while (0);
 #endif /* CONFIG_MMC_ARMMMCI */
 
-#if defined(CONFIG_STM32_USB_OTG_FS)
-		do {
-			static struct stm32f2_gpio_dsc otg_gpio[] = {
-				{0, 11}, {0, 12}, {0, 9}
-			};
-			int	i;
-
-			for (i = 0; i < ARRAY_SIZE(otg_gpio); i++) {
-				stm32f2_gpio_config(&otg_gpio[i],
-						    STM32F2_GPIO_ROLE_USB_OTG);
-			}
-		} while (0);
-#endif /* defined(CONFIG_STM32_USB_OTG_FS) */
-
-#if defined(CONFIG_STM32_USB_OTG_HS)
-		do {
-			static struct stm32f2_gpio_dsc otg_gpio[] = {
-				{0, 5 }, /* CLK PA5 */
-				{2, 0 }, /* STP PC0 */
-				{7, 4 }, /* NXT PH4 */
-
-				{0, 3 }, /* DATA0 PA3  */
-				{1, 0 }, /* DATA1 PB0  */
-				{1, 1 }, /* DATA2 PB1  */
-				{1, 10}, /* DATA3 PB10 */
-				{1, 11}, /* DATA4 PB11 */
-				{1, 12}, /* DATA5 PB12 */
-				{1, 13}, /* DATA6 PB13 */
-				{1, 5 }, /* DATA7 PB5  */
-			};
-			int	i;
-
-			for (i = 0; i < ARRAY_SIZE(otg_gpio); i++) {
-				stm32f2_gpio_config(&otg_gpio[i],
-						    STM32F2_GPIO_ROLE_USB_OTG);
-			}
-
-			/* configure ULPI_DIR */
-			if (platform == PLATFORM_STM32_STM32F7_DISCO) {
-				struct stm32f2_gpio_dsc ulpi_dir = { 2, 2 };
-				stm32f2_gpio_config(&ulpi_dir, STM32F2_GPIO_ROLE_USB_OTG);
-			} else /* default */ {
-				struct stm32f2_gpio_dsc ulpi_dir = { 8, 11 };
-				stm32f2_gpio_config(&ulpi_dir, STM32F2_GPIO_ROLE_USB_OTG);
-			}
-
-		} while (0);
-#endif /* defined(CONFIG_STM32_USB_OTG_HS) */
+#if defined(CONFIG_PM)
+	if (platform == PLATFORM_STM32_STM_STM32F7_SOM ||
+	    platform == PLATFORM_STM32_OLYMPUS_STM32F7) {
+		/* PJ4 = Wake-Up GPIO */
+		gpio_dsc.port = 9;
+		gpio_dsc.pin  = 4;
+		stm32f2_gpio_config(&gpio_dsc, STM32F2_GPIO_ROLE_IN_PUP);
+	}
+#endif
 
 #if defined(CONFIG_GPIOLIB) && defined(CONFIG_GPIO_SYSFS)
 

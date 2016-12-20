@@ -23,6 +23,14 @@ config ARCH_STM32F7
 	help
 	  Build kernel for the STMicro STM32F7 MCU
 
+config STM32_CACHE_USR
+	bool "User-level cache control"
+	default n
+	depends on CPU_CACHE_V7M
+	select CPU_CACHE_V7M_USR
+	help
+	  Allow to control cache from user-level applications
+
 menu "STM32 I/O interfaces"
 	depends on ARCH_STM32
 
@@ -143,13 +151,52 @@ config STM32_RTC
 
 config STM32_USB_OTG_FS
 	depends on ARCH_STM32 && USB_DWC2
-	bool "Enable STM32 USB OTG FS"
+	tristate "Enable STM32 USB OTG FS"
 	default n
+
+choice
+	prompt "USB FS Role"
+	depends on STM32_USB_OTG_FS
+	help
+	  Integrated USB Full-Speed controller mode
+
+config STM32_USB_OTG_FS_HOST
+	bool "Host"
+	select USB_DWC2_HOST
+	select USB_DWC2_PLATFORM
+
+config STM32_USB_OTG_FS_DEVICE
+	bool "Device"
+	select USB_DWC2_PERIPHERAL
+	select USB_GADGET
+	select USB_GADGET_SELECTED
+
+endchoice
 
 config STM32_USB_OTG_HS
 	depends on ARCH_STM32 && USB_DWC2
-	bool "Enable STM32 USB OTG HS"
+	tristate "Enable STM32 USB OTG HS"
 	default n
+
+choice
+	prompt "USB HS Role"
+	depends on STM32_USB_OTG_HS
+	help
+	  Integrated USB High-Speed controller mode
+
+config STM32_USB_OTG_HS_HOST
+	bool "Host"
+	select USB_DWC2_HOST
+	select USB_DWC2_PLATFORM
+
+config STM32_USB_OTG_HS_DEVICE
+	bool "Device"
+	select USB_DWC2_PERIPHERAL
+	select USB_GADGET
+	select USB_GADGET_SELECTED
+	select USB_GADGET_DUALSPEED
+
+endchoice
 
 config STM32_GPIO
 	depends on ARCH_STM32 && GPIOLIB

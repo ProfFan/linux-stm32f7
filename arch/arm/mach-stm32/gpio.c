@@ -42,7 +42,8 @@
 static const unsigned long stm32_gpio_base[] = {
 	STM32F2_GPIOA_BASE, STM32F2_GPIOB_BASE, STM32F2_GPIOC_BASE,
 	STM32F2_GPIOD_BASE, STM32F2_GPIOE_BASE, STM32F2_GPIOF_BASE,
-	STM32F2_GPIOG_BASE, STM32F2_GPIOH_BASE, STM32F2_GPIOI_BASE
+	STM32F2_GPIOG_BASE, STM32F2_GPIOH_BASE, STM32F2_GPIOI_BASE,
+	STM32F4_GPIOJ_BASE, STM32F4_GPIOK_BASE,
 };
 
 /*
@@ -59,7 +60,7 @@ static const unsigned long stm32_gpio_base[] = {
 /*
  * Number of EXTI lines -> there are more of those than EXTI IRQ lines
  */
-#define	STM32_EXTI_LINES_LEN		15
+#define	STM32_EXTI_LINES_LEN		16
 
 /*
  * STM32-specific GPIO chip data structure definition
