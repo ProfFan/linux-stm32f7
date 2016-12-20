@@ -598,6 +598,26 @@ out:
 }
 
 /*
+ * Release resource used
+ */
+static void stm_port_release_port(struct uart_port *port)
+{
+	struct stm32_usart_priv	*priv = stm32_drv_priv(port);
+	int			i;
+
+	free_irq(priv->dma_irq, port);
+	free_irq(priv->usart_irq, port);
+
+	for (i = 0; i < STM32_DMA_RX_BUF_NUM; i++) {
+		if (!priv->rxb[i])
+			continue;
+		dma_free_coherent(NULL, STM32_DMA_RX_BUF_LEN,
+			priv->rxb[i], priv->rxb_dma[i]);
+		priv->rxb[i] = NULL;
+	}
+}
+
+/*
  * Disable the port
  */
 static void stm_port_shutdown(struct uart_port *port)
@@ -616,8 +636,7 @@ static void stm_port_shutdown(struct uart_port *port)
 	uart->sr   = 0;
 #endif
 
-	free_irq(priv->dma_irq, port);
-	free_irq(priv->usart_irq, port);
+	stm_port_release_port(port);
 }
 
 /*
@@ -709,23 +728,6 @@ static int stm_port_verify_port(struct uart_port *port, struct serial_struct *se
 	 */
 
 	return -EINVAL;
-}
-
-/*
- * Release resource used
- */
-static void stm_port_release_port(struct uart_port *port)
-{
-	struct stm32_usart_priv	*priv = stm32_drv_priv(port);
-	int			i;
-
-	for (i = 0; i < STM32_DMA_RX_BUF_NUM; i++) {
-		if (!priv->rxb[i])
-			continue;
-		dma_free_coherent(NULL, STM32_DMA_RX_BUF_LEN,
-			priv->rxb[i], priv->rxb_dma[0]);
-		priv->rxb[i] = NULL;
-	}
 }
 
 /*
@@ -1286,12 +1288,30 @@ static int __devexit stm32_remove(struct platform_device *pdev)
 	return stm32_release(&pdev->dev);
 }
 
+#if defined(CONFIG_PM)
+static int stm32_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	stm_port_shutdown(&stm32_ports[pdev->id]);
+
+	return 0;
+}
+
+static int stm32_resume(struct platform_device *pdev)
+{
+	return stm_port_startup(&stm32_ports[pdev->id]);
+}
+#endif
+
 /*
  * Platform driver instance
  */
 static struct platform_driver stm32_platform_driver = {
 	.probe		= stm32_probe,
 	.remove		= __devexit_p(stm32_remove),
+#if defined(CONFIG_PM)
+	.suspend	= stm32_suspend,
+	.resume		= stm32_resume,
+#endif
 	.driver		= {
 			.owner	= THIS_MODULE,
 			.name	= STM32_USART_DRV_NAME,
